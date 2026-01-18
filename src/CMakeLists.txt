@@ -50,6 +50,11 @@ if (GLFW_BUILD_X11)
                                 glx_context.c)
 endif()
 
+if (GLFW_BUILD_ANDROID)
+    target_compile_definitions(glfw PRIVATE _GLFW_ANDROID)
+    target_sources(glfw PRIVATE android_platform.h android_joystick.h android_init.c android_joystick.c android_monitor.c android_window.c)
+endif()
+
 if (GLFW_BUILD_WAYLAND)
     target_compile_definitions(glfw PRIVATE _GLFW_WAYLAND)
     target_sources(glfw PRIVATE wl_platform.h xkb_unicode.h wl_init.c
@@ -176,6 +181,10 @@ if (GLFW_BUILD_WAYLAND)
         endif()
     endif()
 endif()
+
+if (GLFW_BUILD_ANDROID)
+    target_link_libraries(glfw PRIVATE android log)
+endif ()
 
 if (GLFW_BUILD_X11)
     find_package(X11 REQUIRED)

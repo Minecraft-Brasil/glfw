@@ -146,6 +146,8 @@ typedef const GLubyte* (APIENTRY * PFNGLGETSTRINGIPROC)(GLenum,GLuint);
 #define EGL_EXTENSIONS 0x3055
 #define EGL_CONTEXT_CLIENT_VERSION 0x3098
 #define EGL_NATIVE_VISUAL_ID 0x302e
+#define EGL_HEIGHT 0x3056
+#define EGL_WIDTH 0x3057
 #define EGL_NO_SURFACE ((EGLSurface) 0)
 #define EGL_NO_DISPLAY ((EGLDisplay) 0)
 #define EGL_NO_CONTEXT ((EGLContext) 0)
@@ -205,6 +207,7 @@ typedef EGLContext (APIENTRY * PFN_eglCreateContext)(EGLDisplay,EGLConfig,EGLCon
 typedef EGLBoolean (APIENTRY * PFN_eglDestroySurface)(EGLDisplay,EGLSurface);
 typedef EGLBoolean (APIENTRY * PFN_eglDestroyContext)(EGLDisplay,EGLContext);
 typedef EGLSurface (APIENTRY * PFN_eglCreateWindowSurface)(EGLDisplay,EGLConfig,EGLNativeWindowType,const EGLint*);
+typedef EGLSurface (APIENTRY * PFN_eglCreatePbufferSurface)(EGLDisplay,EGLConfig,const EGLint*);
 typedef EGLBoolean (APIENTRY * PFN_eglMakeCurrent)(EGLDisplay,EGLSurface,EGLSurface,EGLContext);
 typedef EGLBoolean (APIENTRY * PFN_eglSwapBuffers)(EGLDisplay,EGLSurface);
 typedef EGLBoolean (APIENTRY * PFN_eglSwapInterval)(EGLDisplay,EGLint);
@@ -221,6 +224,7 @@ typedef GLFWglproc (APIENTRY * PFN_eglGetProcAddress)(const char*);
 #define eglDestroySurface _glfw.egl.DestroySurface
 #define eglDestroyContext _glfw.egl.DestroyContext
 #define eglCreateWindowSurface _glfw.egl.CreateWindowSurface
+#define eglCreatePbufferSurface _glfw.egl.CreatePbufferSurface
 #define eglMakeCurrent _glfw.egl.MakeCurrent
 #define eglSwapBuffers _glfw.egl.SwapBuffers
 #define eglSwapInterval _glfw.egl.SwapInterval
@@ -277,6 +281,7 @@ typedef enum VkStructureType
     VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000,
     VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK = 1000123000,
     VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT = 1000217000,
+    VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR = 1000008000,
     VK_STRUCTURE_TYPE_MAX_ENUM = 0x7FFFFFFF
 } VkStructureType;
 
@@ -825,6 +830,7 @@ struct _GLFWlibrary
         PFN_eglDestroySurface       DestroySurface;
         PFN_eglDestroyContext       DestroyContext;
         PFN_eglCreateWindowSurface  CreateWindowSurface;
+        PFN_eglCreatePbufferSurface CreatePbufferSurface;
         PFN_eglMakeCurrent          MakeCurrent;
         PFN_eglSwapBuffers          SwapBuffers;
         PFN_eglSwapInterval         SwapInterval;
@@ -860,6 +866,7 @@ struct _GLFWlibrary
         GLFWbool        KHR_xlib_surface;
         GLFWbool        KHR_xcb_surface;
         GLFWbool        KHR_wayland_surface;
+        GLFWbool        KHR_android_surface;
     } vk;
 
     struct {

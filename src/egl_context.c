@@ -32,6 +32,9 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#if defined(_GLFW_ANDROID)
+#include "android_egl_context_hook.h"
+#endif
 
 // Return a description of the specified EGL error
 //
@@ -103,7 +106,7 @@ static GLFWbool chooseEGLConfig(const _GLFWctxconfig* ctxconfig,
             apiBit = EGL_OPENGL_ES2_BIT;
     }
     else
-        apiBit = EGL_OPENGL_BIT;
+        apiBit = EGL_OPENGL_ES2_BIT;
 
     if (fbconfig->stereo)
     {
@@ -240,9 +243,14 @@ static void makeContextCurrentEGL(_GLFWwindow* window)
 {
     if (window)
     {
+        EGLSurface target = window->context.egl.surface;
+#if defined(_GLFW_ANDROID)
+        if(_glfw.platform.platformID == GLFW_PLATFORM_ANDROID) {
+            target = _glfwManageEglSurfaceAndroid(window);
+        }
+#endif
         if (!eglMakeCurrent(_glfw.egl.display,
-                            window->context.egl.surface,
-                            window->context.egl.surface,
+                            target, target,
                             window->context.egl.handle))
         {
             _glfwInputError(GLFW_PLATFORM_ERROR,
@@ -276,6 +284,13 @@ static void swapBuffersEGL(_GLFWwindow* window)
                         "EGL: The context must be current on the calling thread when swapping buffers");
         return;
     }
+#if defined(_GLFW_ANDROID)
+    if (_glfw.platform.platformID == GLFW_PLATFORM_ANDROID)
+    {
+        if(_glfwSwapBuffersAttentionEglAndroid(window))
+            makeContextCurrentEGL(window);
+    }
+#endif
 
 #if defined(_GLFW_WAYLAND)
     if (_glfw.platform.platformID == GLFW_PLATFORM_WAYLAND)
@@ -374,6 +389,8 @@ GLFWbool _glfwInitEGL(void)
         "libEGL-1.so",
 #elif defined(__OpenBSD__) || defined(__NetBSD__)
         "libEGL.so",
+#elif defined(__ANDROID__)
+        "libltw.so",
 #else
         "libEGL.so.1",
 #endif
@@ -420,6 +437,8 @@ GLFWbool _glfwInitEGL(void)
         _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglDestroyContext");
     _glfw.egl.CreateWindowSurface = (PFN_eglCreateWindowSurface)
         _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglCreateWindowSurface");
+    _glfw.egl.CreatePbufferSurface = (PFN_eglCreatePbufferSurface)
+            _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglCreatePbufferSurface");
     _glfw.egl.MakeCurrent = (PFN_eglMakeCurrent)
         _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglMakeCurrent");
     _glfw.egl.SwapBuffers = (PFN_eglSwapBuffers)
@@ -584,84 +603,15 @@ GLFWbool _glfwCreateContextEGL(_GLFWwindow* window,
     if (!chooseEGLConfig(ctxconfig, fbconfig, &config))
         return GLFW_FALSE;
 
-    if (ctxconfig->client == GLFW_OPENGL_ES_API)
+    if (!eglBindAPI(EGL_OPENGL_ES_API))
     {
-        if (!eglBindAPI(EGL_OPENGL_ES_API))
-        {
-            _glfwInputError(GLFW_API_UNAVAILABLE,
-                            "EGL: Failed to bind OpenGL ES: %s",
-                            getEGLErrorString(eglGetError()));
-            return GLFW_FALSE;
-        }
-    }
-    else
-    {
-        if (!eglBindAPI(EGL_OPENGL_API))
-        {
-            _glfwInputError(GLFW_API_UNAVAILABLE,
-                            "EGL: Failed to bind OpenGL: %s",
-                            getEGLErrorString(eglGetError()));
-            return GLFW_FALSE;
-        }
+        _glfwInputError(GLFW_API_UNAVAILABLE,
+                        "EGL: Failed to bind OpenGL ES: %s",
+                        getEGLErrorString(eglGetError()));
+        return GLFW_FALSE;
     }
 
-    if (_glfw.egl.KHR_create_context)
-    {
-        int mask = 0, flags = 0;
-
-        if (ctxconfig->client == GLFW_OPENGL_API)
-        {
-            if (ctxconfig->forward)
-                flags |= EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE_BIT_KHR;
-
-            if (ctxconfig->profile == GLFW_OPENGL_CORE_PROFILE)
-                mask |= EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR;
-            else if (ctxconfig->profile == GLFW_OPENGL_COMPAT_PROFILE)
-                mask |= EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT_KHR;
-        }
-
-        if (ctxconfig->debug)
-            flags |= EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR;
-
-        if (ctxconfig->robustness)
-        {
-            if (ctxconfig->robustness == GLFW_NO_RESET_NOTIFICATION)
-            {
-                SET_ATTRIB(EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_KHR,
-                           EGL_NO_RESET_NOTIFICATION_KHR);
-            }
-            else if (ctxconfig->robustness == GLFW_LOSE_CONTEXT_ON_RESET)
-            {
-                SET_ATTRIB(EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_KHR,
-                           EGL_LOSE_CONTEXT_ON_RESET_KHR);
-            }
-
-            flags |= EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR;
-        }
-
-        if (ctxconfig->major != 1 || ctxconfig->minor != 0)
-        {
-            SET_ATTRIB(EGL_CONTEXT_MAJOR_VERSION_KHR, ctxconfig->major);
-            SET_ATTRIB(EGL_CONTEXT_MINOR_VERSION_KHR, ctxconfig->minor);
-        }
-
-        if (ctxconfig->noerror)
-        {
-            if (_glfw.egl.KHR_create_context_no_error)
-                SET_ATTRIB(EGL_CONTEXT_OPENGL_NO_ERROR_KHR, GLFW_TRUE);
-        }
-
-        if (mask)
-            SET_ATTRIB(EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR, mask);
-
-        if (flags)
-            SET_ATTRIB(EGL_CONTEXT_FLAGS_KHR, flags);
-    }
-    else
-    {
-        if (ctxconfig->client == GLFW_OPENGL_ES_API)
-            SET_ATTRIB(EGL_CONTEXT_CLIENT_VERSION, ctxconfig->major);
-    }
+    SET_ATTRIB(EGL_CONTEXT_CLIENT_VERSION, ctxconfig->major);
 
     if (_glfw.egl.KHR_context_flush_control)
     {
@@ -710,26 +660,26 @@ GLFWbool _glfwCreateContextEGL(_GLFWwindow* window,
 
     SET_ATTRIB(EGL_NONE, EGL_NONE);
 
-    native = _glfw.platform.getEGLNativeWindow(window);
-    // HACK: ANGLE does not implement eglCreatePlatformWindowSurfaceEXT
-    //       despite reporting EGL_EXT_platform_base
-    if (_glfw.egl.platform && _glfw.egl.platform != EGL_PLATFORM_ANGLE_ANGLE)
-    {
-        window->context.egl.surface =
-            eglCreatePlatformWindowSurfaceEXT(_glfw.egl.display, config, native, attribs);
-    }
-    else
-    {
-        window->context.egl.surface =
-            eglCreateWindowSurface(_glfw.egl.display, config, native, attribs);
-    }
+    // On Android, the window is owned completely by the OS. So, Android windows are managed inside
+    // of swapBuffers/makeCurrent
+    if(_glfw.platform.platformID != GLFW_PLATFORM_ANDROID) {
+        native = _glfw.platform.getEGLNativeWindow(window);
+        // HACK: ANGLE does not implement eglCreatePlatformWindowSurfaceEXT
+        //       despite reporting EGL_EXT_platform_base
+        if (_glfw.egl.platform && _glfw.egl.platform != EGL_PLATFORM_ANGLE_ANGLE) {
+            window->context.egl.surface =
+                    eglCreatePlatformWindowSurfaceEXT(_glfw.egl.display, config, native, attribs);
+        } else {
+            window->context.egl.surface =
+                    eglCreateWindowSurface(_glfw.egl.display, config, native, attribs);
+        }
 
-    if (window->context.egl.surface == EGL_NO_SURFACE)
-    {
-        _glfwInputError(GLFW_PLATFORM_ERROR,
-                        "EGL: Failed to create window surface: %s",
-                        getEGLErrorString(eglGetError()));
-        return GLFW_FALSE;
+        if (window->context.egl.surface == EGL_NO_SURFACE) {
+            _glfwInputError(GLFW_PLATFORM_ERROR,
+                            "EGL: Failed to create window surface: %s",
+                            getEGLErrorString(eglGetError()));
+            return GLFW_FALSE;
+        }
     }
 
     window->context.egl.config = config;

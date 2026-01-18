@@ -56,6 +56,9 @@ static const struct
 #if defined(_GLFW_X11)
     { GLFW_PLATFORM_X11, _glfwConnectX11 },
 #endif
+#if defined(_GLFW_ANDROID)
+    { GLFW_PLATFORM_X11, _glfwConnectAndroid },
+#endif
 };
 
 GLFWbool _glfwSelectPlatform(int desiredID, _GLFWplatform* platform)
@@ -68,11 +71,17 @@ GLFWbool _glfwSelectPlatform(int desiredID, _GLFWplatform* platform)
         desiredID != GLFW_PLATFORM_COCOA &&
         desiredID != GLFW_PLATFORM_WAYLAND &&
         desiredID != GLFW_PLATFORM_X11 &&
-        desiredID != GLFW_PLATFORM_NULL)
+        desiredID != GLFW_PLATFORM_NULL &&
+        desiredID != GLFW_PLATFORM_ANDROID)
     {
         _glfwInputError(GLFW_INVALID_ENUM, "Invalid platform ID 0x%08X", desiredID);
         return GLFW_FALSE;
     }
+
+#if defined(_GLFW_ANDROID)
+    // When on Android, we actually dgaf about the user's wishes
+    return _glfwConnectAndroid(GLFW_PLATFORM_ANDROID, platform);
+#endif
 
     // Only allow the Null platform if specifically requested
     if (desiredID == GLFW_PLATFORM_NULL)
