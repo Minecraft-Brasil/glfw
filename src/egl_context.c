@@ -440,40 +440,49 @@ GLFWbool _glfwInitEGL(void)
 
     _glfw.egl.prefix = (strncmp(sonames[i], "lib", 3) == 0);
 
-    _glfw.egl.GetConfigAttrib = (PFN_eglGetConfigAttrib)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglGetConfigAttrib");
-    _glfw.egl.GetConfigs = (PFN_eglGetConfigs)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglGetConfigs");
-    _glfw.egl.GetDisplay = (PFN_eglGetDisplay)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglGetDisplay");
-    _glfw.egl.GetError = (PFN_eglGetError)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglGetError");
-    _glfw.egl.Initialize = (PFN_eglInitialize)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglInitialize");
-    _glfw.egl.Terminate = (PFN_eglTerminate)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglTerminate");
-    _glfw.egl.BindAPI = (PFN_eglBindAPI)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglBindAPI");
-    _glfw.egl.CreateContext = (PFN_eglCreateContext)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglCreateContext");
-    _glfw.egl.DestroySurface = (PFN_eglDestroySurface)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglDestroySurface");
-    _glfw.egl.DestroyContext = (PFN_eglDestroyContext)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglDestroyContext");
-    _glfw.egl.CreateWindowSurface = (PFN_eglCreateWindowSurface)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglCreateWindowSurface");
-    _glfw.egl.CreatePbufferSurface = (PFN_eglCreatePbufferSurface)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglCreatePbufferSurface");
-    _glfw.egl.MakeCurrent = (PFN_eglMakeCurrent)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglMakeCurrent");
-    _glfw.egl.SwapBuffers = (PFN_eglSwapBuffers)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglSwapBuffers");
-    _glfw.egl.SwapInterval = (PFN_eglSwapInterval)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglSwapInterval");
-    _glfw.egl.QueryString = (PFN_eglQueryString)
-        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglQueryString");
     _glfw.egl.GetProcAddress = (PFN_eglGetProcAddress)
         _glfwPlatformGetModuleSymbol(_glfw.egl.handle, "eglGetProcAddress");
+
+    if(!_glfw.egl.GetProcAddress) {
+        _glfwInputError(GLFW_PLATFORM_ERROR,
+                        "EGL: Failed to load eglGetProcAddress");
+
+        _glfwTerminateEGL();
+        return GLFW_FALSE;
+    }
+
+    _glfw.egl.GetConfigAttrib = (PFN_eglGetConfigAttrib)
+            _glfw.egl.GetProcAddress("eglGetConfigAttrib");
+    _glfw.egl.GetConfigs = (PFN_eglGetConfigs)
+            _glfw.egl.GetProcAddress("eglGetConfigs");
+    _glfw.egl.GetDisplay = (PFN_eglGetDisplay)
+            _glfw.egl.GetProcAddress("eglGetDisplay");
+    _glfw.egl.GetError = (PFN_eglGetError)
+            _glfw.egl.GetProcAddress("eglGetError");
+    _glfw.egl.Initialize = (PFN_eglInitialize)
+            _glfw.egl.GetProcAddress("eglInitialize");
+    _glfw.egl.Terminate = (PFN_eglTerminate)
+            _glfw.egl.GetProcAddress("eglTerminate");
+    _glfw.egl.BindAPI = (PFN_eglBindAPI)
+            _glfw.egl.GetProcAddress("eglBindAPI");
+    _glfw.egl.CreateContext = (PFN_eglCreateContext)
+            _glfw.egl.GetProcAddress("eglCreateContext");
+    _glfw.egl.DestroySurface = (PFN_eglDestroySurface)
+            _glfw.egl.GetProcAddress("eglDestroySurface");
+    _glfw.egl.DestroyContext = (PFN_eglDestroyContext)
+            _glfw.egl.GetProcAddress("eglDestroyContext");
+    _glfw.egl.CreateWindowSurface = (PFN_eglCreateWindowSurface)
+            _glfw.egl.GetProcAddress("eglCreateWindowSurface");
+    _glfw.egl.CreatePbufferSurface = (PFN_eglCreatePbufferSurface)
+            _glfw.egl.GetProcAddress("eglCreatePbufferSurface");
+    _glfw.egl.MakeCurrent = (PFN_eglMakeCurrent)
+            _glfw.egl.GetProcAddress("eglMakeCurrent");
+    _glfw.egl.SwapBuffers = (PFN_eglSwapBuffers)
+            _glfw.egl.GetProcAddress("eglSwapBuffers");
+    _glfw.egl.SwapInterval = (PFN_eglSwapInterval)
+            _glfw.egl.GetProcAddress("eglSwapInterval");
+    _glfw.egl.QueryString = (PFN_eglQueryString)
+            _glfw.egl.GetProcAddress("eglQueryString");
 
     if (!_glfw.egl.GetConfigAttrib ||
         !_glfw.egl.GetConfigs ||
