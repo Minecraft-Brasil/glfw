@@ -52,6 +52,7 @@
 #define GLFW_ANDROID_EVENT_TYPE_MOUSE_BUTTONS 2
 #define GLFW_ANDROID_EVENT_TYPE_KEYBOARD_KEY 3
 #define GLFW_ANDROID_EVENT_TYPE_UNICODE_CHARS 4
+#define GLFW_ANDROID_EVENT_TYPE_MOUSE_SCROLL 5
 
 #define FLAG_MOUSE_POS (1 >> 0)
 #define FLAG_APP_FOCUS (1 >> 1)
@@ -89,9 +90,10 @@ static _Thread_local struct {
 typedef struct {
     int32_t type;
     union {
-        struct { int32_t glfw_code, code, state, mods; } k;
+        struct { int32_t glfw_code, code, state, mods; jchar codepoint; } k;
         struct { int32_t button, state, mods; } m;
         struct { int32_t length, mods; jchar *codepoints; } u;
+        struct { double xscroll, yscroll; } s;
     };
 } input_event_t;
 
@@ -237,7 +239,8 @@ static void android_pump_event() {
         case GLFW_ANDROID_EVENT_TYPE_EMPTY:
             break;
         case GLFW_ANDROID_EVENT_TYPE_KEYBOARD_KEY:
-            _glfwInputKey(surfaceOwner, event.k.glfw_code, event.k.code, event.k.state, event.k.mods);
+            if(event.k.glfw_code != 0) _glfwInputKey(surfaceOwner, event.k.glfw_code, event.k.code, event.k.state, event.k.mods);
+            if(event.k.codepoint != 0) _glfwInputChar(surfaceOwner, event.k.codepoint, event.k.mods, true);
             break;
         case GLFW_ANDROID_EVENT_TYPE_MOUSE_BUTTONS:
             _glfwInputMouseClick(surfaceOwner, event.m.button, event.m.state, event.m.mods);
@@ -247,6 +250,9 @@ static void android_pump_event() {
                 _glfwInputChar(surfaceOwner, event.u.codepoints[i], event.u.mods, true);
             }
             free(event.u.codepoints);
+            break;
+        case GLFW_ANDROID_EVENT_TYPE_MOUSE_SCROLL:
+            _glfwInputScroll(surfaceOwner, event.s.xscroll, event.s.yscroll);
             break;
     }
 }
@@ -547,7 +553,7 @@ void _glfwSetWindowSizeLimitsAndroid(_GLFWwindow* window,
     int width = window->android.width;
     int height = window->android.height;
     applySizeLimits(window, &width, &height);
-    _glfwSetWindowSizeAndroid(window, width, height);
+    //_glfwSetWindowSizeAndroid(window, width, height);
 }
 
 void _glfwSetWindowAspectRatioAndroid(_GLFWwindow* window, int n, int d)
@@ -555,7 +561,7 @@ void _glfwSetWindowAspectRatioAndroid(_GLFWwindow* window, int n, int d)
     int width = window->android.width;
     int height = window->android.height;
     applySizeLimits(window, &width, &height);
-    _glfwSetWindowSizeAndroid(window, width, height);
+    //_glfwSetWindowSizeAndroid(window, width, height);
 }
 
 void _glfwGetFramebufferSizeAndroid(_GLFWwindow* window, int* width, int* height)
@@ -1082,7 +1088,7 @@ int _glfwGetKeyScancodeAndroid(int key)
         case GLFW_KEY_RIGHT_CONTROL: return AKEYCODE_CTRL_RIGHT;
         case GLFW_KEY_RIGHT_ALT: return AKEYCODE_ALT_RIGHT;
         default:
-            _glfwInputError(GLFW_INVALID_VALUE, "Invalid or unknown keycode %i", key);
+            //_glfwInputError(GLFW_INVALID_VALUE, "Invalid or unknown keycode %i", key);
             return -1;
     }
 }
@@ -1139,7 +1145,7 @@ VkResult _glfwCreateWindowSurfaceAndroid(VkInstance instance,
 
 
 JNIEXPORT void JNICALL
-Java_git_artdeell_dnbootstrap_NativeSurfaceListener_nativeSurfaceCreated(JNIEnv *env, jclass clazz,
+Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceCreated(JNIEnv *env, jclass clazz,
                                                                          jobject surface) {
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
     ANativeWindow_acquire(window);
@@ -1149,7 +1155,7 @@ Java_git_artdeell_dnbootstrap_NativeSurfaceListener_nativeSurfaceCreated(JNIEnv 
 }
 
 JNIEXPORT void JNICALL
-Java_git_artdeell_dnbootstrap_NativeSurfaceListener_nativeSurfaceDestroyed(JNIEnv *env,
+Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceDestroyed(JNIEnv *env,
                                                                            jclass clazz) {
     surfaceDestroyed = true;
     pthread_mutex_lock(&nwMutex);
@@ -1187,20 +1193,22 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_sendKeyEvent(JNIEnv *env, jclass clazz, 
             .k.glfw_code = glfw_code,
             .k.code = _glfwGetKeyScancodeAndroid(glfw_code),
             .k.state = state,
-            .k.mods = mods
+            .k.mods = mods,
+            .k.codepoint = 0
     };
     android_send_event(&event);
 }
 
 JNIEXPORT void JNICALL
 Java_git_artdeell_dnbootstrap_glfw_GLFW_sendRawKeyEvent(JNIEnv *env, jclass clazz,
-                                                        jint android_code, jint state, jint mods) {
+                                                        jint android_code, jint state, jint mods, jchar codepoint) {
     input_event_t event = {
             .type = GLFW_ANDROID_EVENT_TYPE_KEYBOARD_KEY,
             .k.glfw_code = translate_android_key(android_code),
             .k.code = android_code,
             .k.state = state,
-            .k.mods = mods
+            .k.mods = mods,
+            .k.codepoint = codepoint
     };
     android_send_event(&event);
 }
@@ -1231,4 +1239,16 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_sendBulkUnicodeEvent(JNIEnv *env, jclass
             .u.codepoints = codepoints
     };
     android_send_event(&event);
+}
+
+JNIEXPORT void JNICALL
+Java_git_artdeell_dnbootstrap_glfw_GLFW_sendScrollEvent(JNIEnv *env, jclass clazz, jdouble xoffset,
+                                                        jdouble yoffset) {
+    input_event_t event = {
+            .type = GLFW_ANDROID_EVENT_TYPE_MOUSE_SCROLL,
+            .s.xscroll = xoffset,
+            .s.yscroll = yoffset
+    };
+    android_send_event(&event);
+    // TODO: implement sendScrollEvent()
 }

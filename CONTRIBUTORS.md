@@ -10,6 +10,7 @@ video tutorials.
  - Matt Arsenault
  - Takuro Ashie
  - ashishgamedev
+ - avagordon01
  - David Avedissian
  - Luca Bacci
  - Keith Bauer
@@ -23,6 +24,7 @@ video tutorials.
  - Denis Bernard
  - BiBi
  - Doug Binks
+ - bitb4ker
  - blanco
  - Waris Boonyasiriwat
  - Kyle Brenneman
@@ -33,6 +35,7 @@ video tutorials.
  - Nicolas Caramelli
  - David Carlier
  - Arturo Castro
+ - Jose Luis Cercós Pita
  - Chi-kwan Chan
  - Victor Chernyakin
  - TheChocolateOre
@@ -48,11 +51,14 @@ video tutorials.
  - Andrew Corrigan
  - Bailey Cosier
  - Noel Cower
+ - James Cowgill
  - CuriouserThing
  - Bill Currie
  - Jason Daly
  - danhambleton
  - Jarrod Davis
+ - Aaron Day
+ - decce
  - Olivier Delannoy
  - Paul R. Deppe
  - Michael Dickens
@@ -65,14 +71,19 @@ video tutorials.
  - Robin Eklind
  - Jan Ekström
  - Siavash Eliasi
+ - er-azh
+ - Jan Hendrik Farr
  - Ahmad Fatoum
  - Nikita Fediuchin
  - Felipe Ferreira
  - Michael Fogleman
+ - Folling
  - forworldm
  - Jason Francis
  - Gerald Franz
  - Mário Freitas
+ - Friz64
+ - Daijiro Fukuda
  - GeO4d
  - Marcus Geelnard
  - Gegy
@@ -102,6 +113,7 @@ video tutorials.
  - Charles Huber
  - Brent Huisman
  - Florian Hülsmann
+ - Ryo Ichinose
  - illustris
  - InKryption
  - IntellectualKitty
@@ -118,8 +130,10 @@ video tutorials.
  - Josh Kilmer
  - Byunghoon Kim
  - Cameron King
+ - knokko
  - Peter Knut
  - Christoph Kubisch
+ - Yasutaka Kumei
  - Yuri Kunde Schlesner
  - Rokas Kupstys
  - Konstantin Käfer
@@ -153,8 +167,10 @@ video tutorials.
  - Bryce Mehring
  - Jonathan Mercier
  - Marcel Metz
+ - Lucas Michaudel
  - Liam Middlebrook
  - mightgoyardstill
+ - Mihail
  - Ave Milia
  - Icyllis Milica
  - Jonathan Miller
@@ -226,7 +242,7 @@ video tutorials.
  - Brandon Schaefer
  - Sebastian Schuberth
  - Scr3amer
- - Jan Schuerkamp
+ - Jan Schürkamp
  - Christian Sdunek
  - Matt Sealey
  - Steve Sexton
@@ -275,14 +291,17 @@ video tutorials.
  - Corentin Wallez
  - Torsten Walluhn
  - Patrick Walton
+ - Ivor Wanders
  - Jim Wang
  - Xo Wang
  - Andre Weissflog
  - Jay Weisskopf
+ - Drew Weymouth
  - Frank Wille
  - Andy Williams
  - Joel Winarske
  - Richard A. Wilkes
+ - xfangfang
  - Tatsuya Yatagawa
  - Ryogo Yoshimura
  - Lukas Zanner
@@ -295,3 +314,7 @@ video tutorials.
  - All the unmentioned and anonymous contributors in the GLFW community, for bug
    reports, patches, feedback, testing and encouragement
 
+LWJGL IME support cherry-picked & squashed from:
+
+ - https://github.com/clear-code/glfw/tree/im-support-fullscreen
+ - https://github.com/glfw/glfw/pull/1972
