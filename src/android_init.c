@@ -110,7 +110,11 @@ GLFWbool _glfwConnectAndroid(int platformID, _GLFWplatform* platform)
         .getEGLNativeWindow = _glfwGetEGLNativeWindowAndroid,
         .getRequiredInstanceExtensions = _glfwGetRequiredInstanceExtensionsAndroid,
         .getPhysicalDevicePresentationSupport = _glfwGetPhysicalDevicePresentationSupportAndroid,
-        .createWindowSurface = _glfwCreateWindowSurfaceAndroid
+        .createWindowSurface = _glfwCreateWindowSurfaceAndroid,
+        .setIMEStatus = _glfwSetIMEStatusAndroid,
+        .getIMEStatus = _glfwGetIMEStatusAndroid,
+        .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleAndroid,
+        .resetPreeditText = _glfwResetPreeditTextAndroid
     };
 
     *platform = null;

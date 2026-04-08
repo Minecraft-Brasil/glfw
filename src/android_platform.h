@@ -64,6 +64,7 @@ typedef struct _GLFWwindowAndroid
     GLFWbool        transparent;
     float           opacity;
     int             mode;
+    EGLint          visualId;
 } _GLFWwindowAndroid;
 
 // Android-specific per-monitor data
@@ -153,6 +154,11 @@ void _glfwSetClipboardStringAndroid(const char* string);
 const char* _glfwGetClipboardStringAndroid(void);
 const char* _glfwGetScancodeNameAndroid(int scancode);
 int _glfwGetKeyScancodeAndroid(int key);
+
+void _glfwUpdatePreeditCursorRectangleAndroid(_GLFWwindow* window);
+void _glfwResetPreeditTextAndroid(_GLFWwindow* window);
+void _glfwSetIMEStatusAndroid(_GLFWwindow* window, int active);
+int _glfwGetIMEStatusAndroid(_GLFWwindow* window);
 
 EGLenum _glfwGetEGLPlatformAndroid(EGLint** attribs);
 EGLNativeDisplayType _glfwGetEGLNativeDisplayAndroid(void);

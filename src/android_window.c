@@ -59,7 +59,9 @@
 
 static _GLFWwindow *surfaceOwner = NULL;
 static _Atomic GLFWbool surfaceDestroyed = true;
+static _Atomic GLFWbool induceResize = false;
 static struct ANativeWindow* nativeWindow = NULL;
+static int32_t req_width, req_height;
 static _Atomic uint32_t update_flags;
 
 static pthread_mutex_t nwMutex;
@@ -416,6 +418,11 @@ GLFWbool _glfwCreateWindowAndroid(_GLFWwindow* window,
                 return GLFW_FALSE;
             if (!_glfwCreateContextEGL(window, ctxconfig, fbconfig))
                 return GLFW_FALSE;
+
+            EGLDisplay  display = _glfw.egl.display;
+            EGLConfig  config = window->context.egl.config;
+            EGLBoolean res = eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &window->android.visualId);
+            if(!res) _glfwInputError(GLFW_PLATFORM_ERROR, "Failed to query the default visual ID: %x", eglGetError());
         }
 
         if (!_glfwRefreshContextAttribs(window, ctxconfig))
@@ -860,7 +867,7 @@ void _glfwDestroyCursorAndroid(_GLFWcursor* cursor)
 void _glfwSetCursorAndroid(_GLFWwindow* window, _GLFWcursor* cursor)
 {
     ensure_comm_connected();
-    jobject cursorRef = cursor->android.cursorRef;
+    jobject cursorRef = cursor ? cursor->android.cursorRef : NULL;
     (*jni_tl.env)->CallStaticVoidMethod(jni_tl.env, jni.glfw_class, jni.method_useCursor, cursorRef);
 }
 
@@ -888,29 +895,62 @@ EGLNativeDisplayType _glfwGetEGLNativeDisplayAndroid(void)
 
 EGLNativeWindowType _glfwGetEGLNativeWindowAndroid(_GLFWwindow* window)
 {
+    if(window == surfaceOwner) return nativeWindow;
     return 0;
+}
+
+void _glfwUpdatePreeditCursorRectangleAndroid(_GLFWwindow* window)
+{
+}
+
+void _glfwResetPreeditTextAndroid(_GLFWwindow* window)
+{
+}
+
+void _glfwSetIMEStatusAndroid(_GLFWwindow* window, int active)
+{
+}
+
+int _glfwGetIMEStatusAndroid(_GLFWwindow* window)
+{
+    return GLFW_FALSE;
+}
+
+void updateNativeWindowDimensions(_GLFWwindow* window, int width, int height) {
+    EGLint visualId = window->android.visualId;
+    ANativeWindow_setBuffersGeometry(nativeWindow, width, height, visualId);
+    window->android.width = width;
+    window->android.height = height;
+    induceResize = false;
+
+    _glfwInputWindowSize(window, width, height);
+    _glfwInputFramebufferSize(window, width, height);
 }
 
 // Select a new EGLSurface
 EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
     int wantedMode = GLFW_ANDROID_WINDOW_MODE_UNDEFINED;
-    if(window != surfaceOwner || surfaceDestroyed) wantedMode = GLFW_ANDROID_WINDOW_MODE_PBUFFER;
+    int currentMode = window->android.mode;
+    if (window != surfaceOwner || surfaceDestroyed) wantedMode = GLFW_ANDROID_WINDOW_MODE_PBUFFER;
     else wantedMode = GLFW_ANDROID_WINDOW_MODE_SURFACE;
 
-    if(window->android.mode != wantedMode) {
+    if (currentMode != wantedMode) {
         EGLSurface oldSurface = window->context.egl.surface;
 
         eglMakeCurrent(_glfw.egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        if(oldSurface != EGL_NO_SURFACE) {
+        if (oldSurface != EGL_NO_SURFACE) {
             eglDestroySurface(_glfw.egl.display, oldSurface);
         }
 
-        if(window->android.mode == GLFW_ANDROID_WINDOW_MODE_SURFACE) {
+        if (currentMode == GLFW_ANDROID_WINDOW_MODE_SURFACE) {
             pthread_mutex_lock(&nwMutex);
             pthread_cond_broadcast(&nwCond);
             pthread_mutex_unlock(&nwMutex);
         }
     } else {
+        if(currentMode == GLFW_ANDROID_WINDOW_MODE_SURFACE && induceResize) {
+            updateNativeWindowDimensions(window, req_width, req_height);
+        }
         return window->context.egl.surface;
     }
 
@@ -929,18 +969,14 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
             newSurface = eglCreatePbufferSurface(display, config, attribs);
         } break;
         case GLFW_ANDROID_WINDOW_MODE_SURFACE: {
-            EGLint visualId = WINDOW_FORMAT_RGBX_8888;
-            eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &visualId);
-            int32_t width, height;
-            width = ANativeWindow_getWidth(nativeWindow);
-            height = ANativeWindow_getHeight(nativeWindow);
-            /*width =  window->android.width;
-            height = window->android.height;*/
-            window->android.width = width;
-            window->android.height = height;
-            _glfwInputWindowSize(window, width, height);
+            EGLint visualId = window->android.visualId;
+            int32_t width = req_width, height = req_height;
+            if(width == 0 || height == 0) {
+                width = ANativeWindow_getWidth(nativeWindow);
+                height = ANativeWindow_getHeight(nativeWindow);
+            }
             LOGI("Configure native window for context creation: %p %"PRIi32" %"PRIi32, nativeWindow, width, height);
-            ANativeWindow_setBuffersGeometry(nativeWindow, width, height, visualId);
+            updateNativeWindowDimensions(window, width, height);
             newSurface = eglCreateWindowSurface(display, config, nativeWindow, NULL);
         } break;
         default:
@@ -957,7 +993,7 @@ GLFWbool _glfwSwapBuffersAttentionEglAndroid(_GLFWwindow* window) {
     if(window == surfaceOwner) {
         switch (window->android.mode) {
             case GLFW_ANDROID_WINDOW_MODE_UNDEFINED: return true;
-            case GLFW_ANDROID_WINDOW_MODE_SURFACE: return surfaceDestroyed;
+            case GLFW_ANDROID_WINDOW_MODE_SURFACE: return surfaceDestroyed || induceResize;
             case GLFW_ANDROID_WINDOW_MODE_PBUFFER: return !surfaceDestroyed;
         }
     } else {
@@ -1152,6 +1188,14 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceCreated(JNIEnv *env, jclass
     LOGI("Acquired native window: %p", window);
     nativeWindow = window;
     surfaceDestroyed = false;
+}
+
+JNIEXPORT void JNICALL
+Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSetWindowSize(JNIEnv *env, jclass clazz, jint width,
+                                                            jint height) {
+    req_width = width;
+    req_height = height;
+    induceResize = true;
 }
 
 JNIEXPORT void JNICALL
