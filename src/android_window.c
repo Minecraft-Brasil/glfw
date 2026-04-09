@@ -61,8 +61,11 @@ static _GLFWwindow *surfaceOwner = NULL;
 static _Atomic GLFWbool surfaceDestroyed = true;
 static _Atomic GLFWbool induceResize = false;
 static struct ANativeWindow* nativeWindow = NULL;
-static int32_t req_width, req_height;
-static _Atomic uint32_t update_flags;
+static int32_t req_width = 0, req_height = 0;
+static _Atomic uint32_t update_flags = 0;
+
+const char* clipboard_string = NULL;
+jobject clipboard_string_ref = NULL;
 
 static pthread_mutex_t nwMutex;
 static pthread_cond_t nwCond;
@@ -80,6 +83,8 @@ static struct {
     jmethodID method_receiveCursorPos;
     jmethodID method_loadCursor;
     jmethodID method_useCursor;
+    jmethodID method_getClipboardString;
+    jmethodID method_setClipboardString;
 } jni;
 
 static _Thread_local struct {
@@ -871,16 +876,49 @@ void _glfwSetCursorAndroid(_GLFWwindow* window, _GLFWcursor* cursor)
     (*jni_tl.env)->CallStaticVoidMethod(jni_tl.env, jni.glfw_class, jni.method_useCursor, cursorRef);
 }
 
+static void free_old_clip() {
+    if(clipboard_string != NULL && clipboard_string_ref != NULL) {
+        (*jni_tl.env)->ReleaseStringUTFChars(jni_tl.env, clipboard_string_ref, clipboard_string);
+        (*jni_tl.env)->DeleteGlobalRef(jni_tl.env, clipboard_string_ref);
+        clipboard_string_ref = NULL;
+        clipboard_string = NULL;
+    }
+
+    if(clipboard_string_ref != NULL) {
+        (*jni_tl.env)->DeleteGlobalRef(jni_tl.env, clipboard_string_ref);
+        clipboard_string_ref = NULL;
+    }
+}
+
+static void set_new_clip(jstring clip_string) {
+    clipboard_string_ref = (*jni_tl.env)->NewGlobalRef(jni_tl.env, clip_string);
+    clipboard_string = (*jni_tl.env)->GetStringUTFChars(jni_tl.env, clipboard_string_ref, NULL);
+}
+
 void _glfwSetClipboardStringAndroid(const char* string)
 {
-    char* copy = _glfw_strdup(string);
-    _glfw_free(_glfw.android.clipboardString);
-    _glfw.android.clipboardString = copy;
+    ensure_comm_connected();
+
+    free_old_clip();
+
+    jstring clip_string = (*jni_tl.env)->NewStringUTF(jni_tl.env, string);
+
+    (*jni_tl.env)->CallStaticVoidMethod(jni_tl.env, jni.glfw_class, jni.method_setClipboardString, clip_string);
 }
 
 const char* _glfwGetClipboardStringAndroid(void)
 {
-    return _glfw.android.clipboardString;
+    ensure_comm_connected();
+
+    free_old_clip();
+
+    jstring clip_string = (*jni_tl.env)->CallStaticObjectMethod(jni_tl.env, jni.glfw_class, jni.method_getClipboardString);
+    if(clip_string == NULL) {
+        return "";
+    }
+
+    set_new_clip(clip_string);
+    return clipboard_string;
 }
 
 EGLenum _glfwGetEGLPlatformAndroid(EGLint** attribs)
@@ -1227,6 +1265,8 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_initialize(JNIEnv *env, jclass clazz) {
     jni.method_receiveCursorPos = (*env)->GetStaticMethodID(env, clazz, "receiveCursorPos", "(DD)V");
     jni.method_loadCursor = (*env)->GetStaticMethodID(env, clazz, "loadCursor","(Ljava/nio/ByteBuffer;IIII)Lgit/artdeell/dnbootstrap/glfw/GLFWCursor;");
     jni.method_useCursor = (*env)->GetStaticMethodID(env, clazz, "useCursor","(Lgit/artdeell/dnbootstrap/glfw/GLFWCursor;)V");
+    jni.method_getClipboardString = (*env)->GetStaticMethodID(env, clazz, "getClipboardString", "()Ljava/lang/String;");
+    jni.method_setClipboardString = (*env)->GetStaticMethodID(env, clazz, "setClipboardString", "(Ljava/lang/String;)V");
 }
 
 JNIEXPORT void JNICALL
