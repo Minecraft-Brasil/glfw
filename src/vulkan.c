@@ -97,6 +97,11 @@ GLFWbool _glfwInitVulkan(int mode)
             _glfw.vk.handle = loadLocalVulkanLoaderMacOS();
 #elif defined(__OpenBSD__) || defined(__NetBSD__)
         _glfw.vk.handle = _glfwPlatformLoadModule("libvulkan.so");
+#elif defined(__ANDROID__)
+        // Use the custom Vulkan loader
+        _glfw.vk.handle = _glfwLoadVulkanDriverAndroid();
+        if(_glfw.vk.handle == NULL)
+            _glfw.vk.handle = _glfwPlatformLoadModule("libvulkan.so");
 #else
         _glfw.vk.handle = _glfwPlatformLoadModule("libvulkan.so.1");
 #endif

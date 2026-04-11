@@ -45,7 +45,37 @@ typedef struct VkAndroidSurfaceCreateInfoKHR {
     struct ANativeWindow*                    window;
 } VkAndroidSurfaceCreateInfoKHR;
 
+typedef enum VkQueueFlagBits {
+    VK_QUEUE_GRAPHICS_BIT = 0x00000001,
+    VK_QUEUE_COMPUTE_BIT = 0x00000002,
+    VK_QUEUE_TRANSFER_BIT = 0x00000004,
+    VK_QUEUE_SPARSE_BINDING_BIT = 0x00000008,
+    VK_QUEUE_PROTECTED_BIT = 0x00000010,
+    VK_QUEUE_VIDEO_DECODE_BIT_KHR = 0x00000020,
+    VK_QUEUE_VIDEO_ENCODE_BIT_KHR = 0x00000040,
+    VK_QUEUE_OPTICAL_FLOW_BIT_NV = 0x00000100,
+    VK_QUEUE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+} VkQueueFlagBits;
+
+typedef struct VkExtent3D {
+    uint32_t    width;
+    uint32_t    height;
+    uint32_t    depth;
+} VkExtent3D;
+
+typedef VkFlags VkQueueFlags;
+
+typedef struct VkQueueFamilyProperties {
+    VkQueueFlags    queueFlags;
+    uint32_t        queueCount;
+    uint32_t        timestampValidBits;
+    VkExtent3D      minImageTransferGranularity;
+} VkQueueFamilyProperties;
+
 typedef VkResult (APIENTRY *PFN_vkCreateAndroidSurfaceKHR)(VkInstance,const VkAndroidSurfaceCreateInfoKHR*,const VkAllocationCallbacks*,VkSurfaceKHR*);
+typedef void (APIENTRY *PFN_vkGetPhysicalDeviceQueueFamilyProperties)(VkPhysicalDevice, uint32_t*, VkQueueFamilyProperties*);
+
+typedef int32_t (*ANativeWindow_setBuffersTransform_t)(struct ANativeWindow *_Nonnull window,int32_t transform);
 
 // Android-specific per-window data
 //
@@ -80,8 +110,8 @@ typedef struct _GLFWlibraryAndroid
 {
     double          xcursor;
     double          ycursor;
-    char*           clipboardString;
     _GLFWwindow*    focusedWindow;
+    ANativeWindow_setBuffersTransform_t fSetBuffersTransform;
 } _GLFWlibraryAndroid;
 
 typedef struct _GLFWcursorAndroid
@@ -169,4 +199,6 @@ GLFWbool _glfwGetPhysicalDevicePresentationSupportAndroid(VkInstance instance, V
 VkResult _glfwCreateWindowSurfaceAndroid(VkInstance instance, _GLFWwindow* window, const VkAllocationCallbacks* allocator, VkSurfaceKHR* surface);
 
 void _glfwPollMonitorsAndroid(void);
-
+// Note: for a single window ONLY!
+int _glfwDisablePrerotationAndroid(struct ANativeWindow* nativeWindow);
+void* _glfwLoadVulkanDriverAndroid(void);

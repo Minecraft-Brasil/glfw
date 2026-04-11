@@ -124,6 +124,17 @@ GLFWbool _glfwConnectAndroid(int platformID, _GLFWplatform* platform)
 extern GLFWbool android_init_window(void);
 extern void android_destroy_window(void);
 
+void* _glfwLoadVulkanDriverAndroid(void) {
+    void* pojavexec_handle = _glfwPlatformLoadModule("libpojavexec.so");
+    if(pojavexec_handle == NULL) return NULL;
+    typedef void* (*loadVulkanDriver_t)();
+    loadVulkanDriver_t loadVulkanDriver = (loadVulkanDriver_t)
+            _glfwPlatformGetModuleSymbol(pojavexec_handle, "pojavexec_loadVulkanDriver");
+    void* vkHandle = loadVulkanDriver();
+    _glfwPlatformFreeModule(pojavexec_handle);
+    return vkHandle;
+}
+
 int _glfwInitAndroid(void)
 {
     _glfwPollMonitorsAndroid();

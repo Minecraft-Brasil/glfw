@@ -60,6 +60,7 @@
 static _GLFWwindow *surfaceOwner = NULL;
 static _Atomic GLFWbool surfaceDestroyed = true;
 static _Atomic GLFWbool induceResize = false;
+static _Atomic GLFWbool ownedByVulkan = false;
 static struct ANativeWindow* nativeWindow = NULL;
 static int32_t req_width = 0, req_height = 0;
 static _Atomic uint32_t update_flags = 0;
@@ -67,8 +68,10 @@ static _Atomic uint32_t update_flags = 0;
 const char* clipboard_string = NULL;
 jobject clipboard_string_ref = NULL;
 
-static pthread_mutex_t nwMutex;
-static pthread_cond_t nwCond;
+static pthread_mutex_t nw_egl_mutex;
+static pthread_cond_t nw_egl_cond;
+static pthread_mutex_t nw_vulkan_mutex;
+static pthread_cond_t nw_vulkan_cond;
 
 static int event_pipe[2];
 
@@ -376,23 +379,31 @@ static int createNativeWindow(_GLFWwindow* window,
     return GLFW_TRUE;
 }
 
+
 GLFWbool android_init_window(void) {
-    if(pthread_mutex_init(&nwMutex, NULL) != 0) return GLFW_FALSE;
-    if(pthread_cond_init(&nwCond, NULL) != 0) goto fail1;
-    if(pipe(event_pipe) != 0) goto fail2;
+    if(pthread_mutex_init(&nw_egl_mutex, NULL) != 0) return GLFW_FALSE;
+    if(pthread_cond_init(&nw_egl_cond, NULL) != 0) goto fail1;
+    if(pthread_mutex_init(&nw_vulkan_mutex, NULL) != 0) goto fail2;
+    if(pthread_cond_init(&nw_vulkan_cond, NULL) != 0) goto fail3;
+    if(pipe(event_pipe) != 0) goto fail4;
     return GLFW_TRUE;
+
+    fail4:
+    pthread_cond_destroy(&nw_vulkan_cond);
+    fail3:
+    pthread_mutex_destroy(&nw_vulkan_mutex);
     fail2:
-    pthread_cond_destroy(&nwCond);
+    pthread_cond_destroy(&nw_egl_cond);
     fail1:
-    pthread_mutex_destroy(&nwMutex);
+    pthread_mutex_destroy(&nw_egl_mutex);
     return GLFW_FALSE;
 }
 
 void android_destroy_window(void) {
     close(event_pipe[0]);
     close(event_pipe[1]);
-    pthread_mutex_destroy(&nwMutex);
-    pthread_cond_destroy(&nwCond);
+    pthread_mutex_destroy(&nw_egl_mutex);
+    pthread_cond_destroy(&nw_egl_cond);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -981,9 +992,9 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
         }
 
         if (currentMode == GLFW_ANDROID_WINDOW_MODE_SURFACE) {
-            pthread_mutex_lock(&nwMutex);
-            pthread_cond_broadcast(&nwCond);
-            pthread_mutex_unlock(&nwMutex);
+            pthread_mutex_lock(&nw_egl_mutex);
+            pthread_cond_broadcast(&nw_egl_cond);
+            pthread_mutex_unlock(&nw_egl_mutex);
         }
     } else {
         if(currentMode == GLFW_ANDROID_WINDOW_MODE_SURFACE && induceResize) {
@@ -1028,7 +1039,7 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
 
 // Check if the surface has been changed before attempting to swap buffers
 GLFWbool _glfwSwapBuffersAttentionEglAndroid(_GLFWwindow* window) {
-    if(window == surfaceOwner) {
+    if(window == surfaceOwner && !ownedByVulkan) {
         switch (window->android.mode) {
             case GLFW_ANDROID_WINDOW_MODE_UNDEFINED: return true;
             case GLFW_ANDROID_WINDOW_MODE_SURFACE: return surfaceDestroyed || induceResize;
@@ -1179,7 +1190,21 @@ GLFWbool _glfwGetPhysicalDevicePresentationSupportAndroid(VkInstance instance,
                                                        VkPhysicalDevice device,
                                                        uint32_t queuefamily)
 {
-    return GLFW_FALSE;
+    if(!_glfw.vk.KHR_surface || !_glfw.vk.KHR_android_surface) return false;
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties getPhysicalDeviceQueueFamilyProperties =
+            (PFN_vkGetPhysicalDeviceQueueFamilyProperties) vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+
+    if(getPhysicalDeviceQueueFamilyProperties == NULL) {
+        _glfwInputError(GLFW_API_UNAVAILABLE,
+                        "Android: Vulkan instance missing vkGetPhysicalDeviceQueueFamilyProperties");
+        return false;
+    }
+    uint32_t maxfamilies = queuefamily + 1;
+    VkQueueFamilyProperties properties[maxfamilies];
+    properties[queuefamily].queueFlags = 0; // reset the flag in case the function below doesn't write to it
+    getPhysicalDeviceQueueFamilyProperties(device, &maxfamilies, properties);
+
+    return (properties[queuefamily].queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT;
 }
 
 VkResult _glfwCreateWindowSurfaceAndroid(VkInstance instance,
@@ -1199,6 +1224,17 @@ VkResult _glfwCreateWindowSurfaceAndroid(VkInstance instance,
                         "Android: Vulkan instance missing VK_KHR_android_surface extension");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
+
+    ownedByVulkan = true;
+
+    // Wait for a new window to become available
+    if(nativeWindow == NULL) {
+        pthread_mutex_lock(&nw_vulkan_mutex);
+        pthread_cond_wait(&nw_vulkan_cond, &nw_vulkan_mutex);
+        pthread_mutex_unlock(&nw_vulkan_mutex);
+    }
+
+    _glfwDisablePrerotationAndroid(nativeWindow);
 
     memset(&sci, 0, sizeof(sci));
     sci.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
@@ -1226,6 +1262,11 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceCreated(JNIEnv *env, jclass
     LOGI("Acquired native window: %p", window);
     nativeWindow = window;
     surfaceDestroyed = false;
+    if(ownedByVulkan) {
+        pthread_mutex_lock(&nw_vulkan_mutex);
+        pthread_cond_broadcast(&nw_vulkan_cond);
+        pthread_mutex_unlock(&nw_vulkan_mutex);
+    }
 }
 
 JNIEXPORT void JNICALL
@@ -1240,12 +1281,18 @@ JNIEXPORT void JNICALL
 Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceDestroyed(JNIEnv *env,
                                                                            jclass clazz) {
     surfaceDestroyed = true;
-    pthread_mutex_lock(&nwMutex);
-    pthread_cond_wait(&nwCond, &nwMutex);
-    LOGI("Unhalted after window destruction");
-    ANativeWindow_release(nativeWindow);
-    nativeWindow = NULL;
-    pthread_mutex_unlock(&nwMutex);
+    if(!ownedByVulkan) {
+        pthread_mutex_lock(&nw_egl_mutex);
+        pthread_cond_wait(&nw_egl_cond, &nw_egl_mutex);
+        LOGI("Unhalted after window destruction");
+        ANativeWindow_release(nativeWindow);
+        nativeWindow = NULL;
+        pthread_mutex_unlock(&nw_egl_mutex);
+    }else {
+        ANativeWindow_release(nativeWindow);
+        nativeWindow = NULL;
+    }
+
 }
 
 
