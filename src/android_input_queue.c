@@ -7,51 +7,41 @@
 
 #include "android_input_queue.h"
 
-static bool queue_init_single(queue_t* queue) {
-    queue->events_total = 0;
-    if(pthread_mutex_init(&queue->wait_mutex, NULL) != 0) return false;
-    if(pthread_cond_init(&queue->wait_cond, NULL) != 0) goto fail;
-    return true;
-    fail:
-    pthread_mutex_destroy(&queue->wait_mutex);
-    return false;
-}
-
-static void queue_destroy_single(queue_t* queue) {
-    pthread_mutex_destroy(&queue->wait_mutex);
-    pthread_cond_destroy(&queue->wait_cond);
-}
-
 bool _input_queue_init(queue_top_t* top) {
     top->index = 0;
-    int initialized;
-    bool ok = true;
-    for(initialized = 0; initialized < 2; initialized++) {
-        if(!(ok = queue_init_single(&top->queues[initialized]))) break;
-    }
-    if(ok) return true;
-    for(int i = 0; i < initialized + 1; i++) {
-        queue_destroy_single(&top->queues[i]);
-    }
+    for(int i = 0; i < 2; i++) top->queues[i].events_total = 0;
+    if(pthread_mutex_init(&top->wait_mutex, NULL) != 0) return false;
+
+    pthread_condattr_t attr;
+    if(pthread_condattr_init(&attr) != 0) goto fail;
+    if(pthread_condattr_setclock(&attr, CLOCK_MONOTONIC) != 0) goto fail2;
+
+    if(pthread_cond_init(&top->wait_cond, &attr) != 0) goto fail2;
+
+    pthread_condattr_destroy(&attr);
+    return true;
+    fail2:
+    pthread_condattr_destroy(&attr);
+    fail:
+    pthread_mutex_destroy(&top->wait_mutex);
     return false;
 }
 
 void _input_queue_destroy(queue_top_t* top) {
-    for(int i = 0; i < 2; i++) {
-        queue_destroy_single(&top->queues[i]);
-    }
+    pthread_mutex_destroy(&top->wait_mutex);
+    pthread_cond_destroy(&top->wait_cond);
+}
+
+void _input_queue_wait_unlock(queue_top_t* top) {
+    pthread_cond_broadcast(&top->wait_cond);
 }
 
 void _input_queue_push(queue_top_t* top, input_event_t* event) {
     queue_t *current = &top->queues[atomic_load(&top->index)];
     uint16_t ev_idx = atomic_fetch_add(&current->events_total, 1);
     input_event_t *put_event = &current->events[ev_idx];
-    if(ev_idx == 0) {
-        pthread_mutex_lock(&current->wait_mutex);
-        pthread_cond_broadcast(&current->wait_cond);
-        pthread_mutex_unlock(&current->wait_mutex);
-    }
     memcpy(put_event, event, sizeof(input_event_t));
+    pthread_cond_broadcast(&top->wait_cond);
 }
 
 void _input_queue_dequeue(queue_top_t* top, dequeue_callback_t cb) {
@@ -63,15 +53,22 @@ void _input_queue_dequeue(queue_top_t* top, dequeue_callback_t cb) {
     current->events_total = 0;
 }
 
-void _input_queue_wait(queue_top_t* top, dequeue_callback_t cb, struct timespec* timeout) {
+void _input_queue_timedwait(queue_top_t* top, dequeue_callback_t cb, struct timespec* timeout) {
     queue_t *current = &top->queues[top->index];
     if(current->events_total == 0) {
-        pthread_mutex_lock(&current->wait_mutex);
-        if(timeout->tv_sec == 0 && timeout->tv_nsec == 0)
-            pthread_cond_wait(&current->wait_cond, &current->wait_mutex);
-        else
-            pthread_cond_timedwait(&current->wait_cond, &current->wait_mutex, timeout);
-        pthread_mutex_unlock(&current->wait_mutex);
+        pthread_mutex_lock(&top->wait_mutex);
+        pthread_cond_timedwait(&top->wait_cond, &top->wait_mutex, timeout);
+        pthread_mutex_unlock(&top->wait_mutex);
+    }
+    _input_queue_dequeue(top, cb);
+}
+
+void _input_queue_wait(queue_top_t* top, dequeue_callback_t cb) {
+    queue_t *current = &top->queues[top->index];
+    if(current->events_total == 0) {
+        pthread_mutex_lock(&top->wait_mutex);
+        pthread_cond_wait(&top->wait_cond, &top->wait_mutex);
+        pthread_mutex_unlock(&top->wait_mutex);
     }
     _input_queue_dequeue(top, cb);
 }

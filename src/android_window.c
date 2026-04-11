@@ -63,6 +63,7 @@ static _GLFWwindow *surfaceOwner = NULL;
 static _Atomic GLFWbool surfaceDestroyed = true;
 static _Atomic GLFWbool induceResize = false;
 static _Atomic GLFWbool ownedByVulkan = false;
+static _Atomic GLFWbool surfaceInUse = false;
 static struct ANativeWindow* nativeWindow = NULL;
 static int32_t req_width = 0, req_height = 0;
 static _Atomic uint32_t update_flags = 0;
@@ -261,8 +262,7 @@ static inline void android_send_event(input_event_t *ev) {
     _input_queue_push(&input_queue, ev);
 }
 
-static bool process_flag_bits() {
-    if(update_flags == 0) return false;
+static void push_flag_events() {
     if((update_flags & FLAG_MOUSE_POS) != 0) {
         int width = surfaceOwner->android.width;
         int height = surfaceOwner->android.height;
@@ -271,7 +271,11 @@ static bool process_flag_bits() {
         _glfwInputCursorPos(surfaceOwner, _glfw.android.xcursor, _glfw.android.ycursor);
     }
     update_flags = 0;
-    return true;
+}
+
+static inline void process_flag_bits() {
+    if(update_flags == 0) return;
+    push_flag_events();
 }
 
 static void applySizeLimits(_GLFWwindow* window, int* width, int* height)
@@ -767,31 +771,42 @@ void _glfwPollEventsAndroid(void)
     _input_queue_dequeue(&input_queue, android_dequeue_event);
 }
 
+static inline void poll_with_flags() {
+    push_flag_events();
+    _input_queue_dequeue(&input_queue, android_dequeue_event);
+}
+
 void _glfwWaitEventsAndroid(void)
 {
-    if(process_flag_bits()) {
-        _input_queue_dequeue(&input_queue, android_dequeue_event);
+    if(update_flags != 0) {
+        poll_with_flags();
         return;
     }
-
-    struct timespec ts_none = {0, 0};
-    _input_queue_wait(&input_queue, android_dequeue_event, &ts_none);
+    _input_queue_wait(&input_queue, android_dequeue_event);
+    process_flag_bits();
 }
 
 void _glfwWaitEventsTimeoutAndroid(double timeout)
 {
-    if(process_flag_bits()) {
-        _input_queue_dequeue(&input_queue, android_dequeue_event);
+    if(update_flags != 0) {
+        poll_with_flags();
         return;
     }
 
     double norm, rem;
     rem = modf(timeout, &norm);
-    struct timespec ts_timeout = {
-            (long) norm,
-            (long) (rem * 1000000000.0)
-    };
-    _input_queue_wait(&input_queue, android_dequeue_event, &ts_timeout);
+    struct timespec ts_timeout;
+    if(clock_gettime(CLOCK_MONOTONIC, &ts_timeout) == 0) {
+        long total_wait_nsec = ts_timeout.tv_nsec + (long) (rem * 1000000000.0);
+        long extra_wait_sec = total_wait_nsec / 1000000000L;
+        ts_timeout.tv_nsec = total_wait_nsec % 1000000000L;
+        ts_timeout.tv_sec += extra_wait_sec + (long) norm;
+        _input_queue_timedwait(&input_queue, android_dequeue_event, &ts_timeout);
+    }else {
+        _input_queue_dequeue(&input_queue, android_dequeue_event);
+    }
+
+    process_flag_bits();
 }
 
 void _glfwPostEmptyEventAndroid(void)
@@ -1291,6 +1306,7 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_sendMousePosition0__DD(JNIEnv *env, jcla
     cursor_unscaled.x = v1;
     cursor_unscaled.y = v2;
     update_flags |= FLAG_MOUSE_POS;
+    _input_queue_wait_unlock(&input_queue);
 }
 
 JNIEXPORT void JNICALL
