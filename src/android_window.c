@@ -27,6 +27,7 @@
 
 #include "internal.h"
 #include "android_egl_context_hook.h"
+#include "android_input_queue.h"
 
 #include <stdlib.h>
 
@@ -39,6 +40,7 @@
 #include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
+#include <math.h>
 #include <android/native_window_jni.h>
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "android_window", __VA_ARGS__)
@@ -73,8 +75,6 @@ static pthread_cond_t nw_egl_cond;
 static pthread_mutex_t nw_vulkan_mutex;
 static pthread_cond_t nw_vulkan_cond;
 
-static int event_pipe[2];
-
 static struct {
     double x, y;
 } cursor_unscaled;
@@ -97,16 +97,7 @@ static _Thread_local struct {
         .attached = false
 };
 
-typedef struct {
-    int32_t type;
-    union {
-        struct { int32_t glfw_code, code, state, mods; jchar codepoint; } k;
-        struct { int32_t button, state, mods; } m;
-        struct { int32_t length, mods; jchar *codepoints; } u;
-        struct { double xscroll, yscroll; } s;
-    };
-} input_event_t;
-
+static queue_top_t input_queue;
 
 static void ensure_comm_connected() {
     if(jni_tl.attached) return;
@@ -241,9 +232,8 @@ static int translate_android_action_button(int32_t actionButton) {
     }
 }
 
-static void android_pump_event() {
-    input_event_t event;
-    read(event_pipe[0], &event, sizeof(event));
+static void android_dequeue_event(input_event_t* evp) {
+    input_event_t event = *evp;
     if(surfaceOwner == NULL) return;
     switch (event.type) {
         case GLFW_ANDROID_EVENT_TYPE_EMPTY:
@@ -267,29 +257,12 @@ static void android_pump_event() {
     }
 }
 
-static void android_pump_all_events(int timeout) {
-    struct pollfd evpipe_poll = {
-            .fd = event_pipe[0],
-            .events = POLLIN
-    };
-    while (true){
-        poll(&evpipe_poll, 1, timeout);
-        if ((evpipe_poll.revents & POLLIN) == 0) return;
-        android_pump_event();
-        timeout = 0;
-    }
+static inline void android_send_event(input_event_t *ev) {
+    _input_queue_push(&input_queue, ev);
 }
 
-static void android_send_event(input_event_t *ev) {
-    write(event_pipe[1], ev, sizeof(input_event_t));
-}
-
-static void process_flag_bits() {
-    if(update_flags == 0) return;
-    input_event_t event = {
-            .type = GLFW_ANDROID_EVENT_TYPE_EMPTY
-    };
-    android_send_event(&event);
+static bool process_flag_bits() {
+    if(update_flags == 0) return false;
     if((update_flags & FLAG_MOUSE_POS) != 0) {
         int width = surfaceOwner->android.width;
         int height = surfaceOwner->android.height;
@@ -298,6 +271,7 @@ static void process_flag_bits() {
         _glfwInputCursorPos(surfaceOwner, _glfw.android.xcursor, _glfw.android.ycursor);
     }
     update_flags = 0;
+    return true;
 }
 
 static void applySizeLimits(_GLFWwindow* window, int* width, int* height)
@@ -385,7 +359,7 @@ GLFWbool android_init_window(void) {
     if(pthread_cond_init(&nw_egl_cond, NULL) != 0) goto fail1;
     if(pthread_mutex_init(&nw_vulkan_mutex, NULL) != 0) goto fail2;
     if(pthread_cond_init(&nw_vulkan_cond, NULL) != 0) goto fail3;
-    if(pipe(event_pipe) != 0) goto fail4;
+    if(!_input_queue_init(&input_queue)) goto fail4;
     return GLFW_TRUE;
 
     fail4:
@@ -400,10 +374,11 @@ GLFWbool android_init_window(void) {
 }
 
 void android_destroy_window(void) {
-    close(event_pipe[0]);
-    close(event_pipe[1]);
     pthread_mutex_destroy(&nw_egl_mutex);
     pthread_cond_destroy(&nw_egl_cond);
+    pthread_mutex_destroy(&nw_vulkan_mutex);
+    pthread_cond_destroy(&nw_vulkan_cond);
+    _input_queue_destroy(&input_queue);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -789,20 +764,34 @@ GLFWbool _glfwWindowVisibleAndroid(_GLFWwindow* window)
 void _glfwPollEventsAndroid(void)
 {
     process_flag_bits();
-    android_pump_all_events(0);
+    _input_queue_dequeue(&input_queue, android_dequeue_event);
 }
 
 void _glfwWaitEventsAndroid(void)
 {
-    process_flag_bits();
-    android_pump_event();
-    android_pump_all_events(0);
+    if(process_flag_bits()) {
+        _input_queue_dequeue(&input_queue, android_dequeue_event);
+        return;
+    }
+
+    struct timespec ts_none = {0, 0};
+    _input_queue_wait(&input_queue, android_dequeue_event, &ts_none);
 }
 
 void _glfwWaitEventsTimeoutAndroid(double timeout)
 {
-    process_flag_bits();
-    android_pump_all_events((int) (timeout * 1000.0));
+    if(process_flag_bits()) {
+        _input_queue_dequeue(&input_queue, android_dequeue_event);
+        return;
+    }
+
+    double norm, rem;
+    rem = modf(timeout, &norm);
+    struct timespec ts_timeout = {
+            (long) norm,
+            (long) (rem * 1000000000.0)
+    };
+    _input_queue_wait(&input_queue, android_dequeue_event, &ts_timeout);
 }
 
 void _glfwPostEmptyEventAndroid(void)
