@@ -385,17 +385,32 @@ void android_destroy_window(void) {
     _input_queue_destroy(&input_queue);
 }
 
+static void android_reconfigure_context(const _GLFWctxconfig *ctxconfig, _GLFWctxconfig *target) {
+    memcpy(target, ctxconfig, sizeof (_GLFWctxconfig));
+    if(target->client == GLFW_NO_API) return;
+
+    if(_glfw.android.renderspec->force_gles_context) {
+        target->client = GLFW_OPENGL_ES_API;
+        target->major = _glfw.android.renderspec->override_major_version;
+        target->minor = 0;
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////
 //////                       GLFW platform API                      //////
 //////////////////////////////////////////////////////////////////////////
 
 GLFWbool _glfwCreateWindowAndroid(_GLFWwindow* window,
                                const _GLFWwndconfig* wndconfig,
-                               const _GLFWctxconfig* ctxconfig,
+                               const _GLFWctxconfig* old_config,
                                const _GLFWfbconfig* fbconfig)
 {
     if (!createNativeWindow(window, wndconfig, fbconfig))
         return GLFW_FALSE;
+
+    _GLFWctxconfig new_config;
+    android_reconfigure_context(old_config, &new_config);
+    const _GLFWctxconfig *ctxconfig = &new_config;
 
     if (ctxconfig->client != GLFW_NO_API)
     {
@@ -943,7 +958,7 @@ EGLenum _glfwGetEGLPlatformAndroid(EGLint** attribs)
 
 EGLNativeDisplayType _glfwGetEGLNativeDisplayAndroid(void)
 {
-    return 0;
+    return EGL_DEFAULT_DISPLAY;
 }
 
 EGLNativeWindowType _glfwGetEGLNativeWindowAndroid(_GLFWwindow* window)

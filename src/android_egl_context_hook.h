@@ -14,4 +14,6 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow*);
 // Check if the surface has been changed before attempting to swap buffers
 GLFWbool _glfwSwapBuffersAttentionEglAndroid(_GLFWwindow*);
 
+void* _glfwLoadEglAndroid(void);
+
 #endif //DNBOOTSTRAP_ANDROID_EGL_CONTEXT_HOOK_H

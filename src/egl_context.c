@@ -425,12 +425,16 @@ GLFWbool _glfwInitEGL(void)
     if (_glfw.egl.handle)
         return GLFW_TRUE;
 
-    for (i = 0;  sonames[i];  i++)
-    {
-        _glfw.egl.handle = _glfwPlatformLoadModule(sonames[i]);
-        if (_glfw.egl.handle)
-            break;
-    }
+#if defined(__ANDROID__)
+    _glfw.egl.handle = _glfwLoadEglAndroid();
+    i = 0;
+    if(!_glfw.egl.handle)
+#endif
+        for (i = 0; sonames[i]; i++) {
+            _glfw.egl.handle = _glfwPlatformLoadModule(sonames[i]);
+            if (_glfw.egl.handle)
+                break;
+        }
 
     if (!_glfw.egl.handle)
     {

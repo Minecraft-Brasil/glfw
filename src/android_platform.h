@@ -77,6 +77,13 @@ typedef void (APIENTRY *PFN_vkGetPhysicalDeviceQueueFamilyProperties)(VkPhysical
 
 typedef int32_t (*ANativeWindow_setBuffersTransform_t)(struct ANativeWindow *_Nonnull window,int32_t transform);
 
+typedef struct {
+    void* egl_handle; // Set to a dlopen handle in order to force GLFW to load EGL symbols from a particular library
+    int force_gles_context;
+    int override_major_version;
+} pojavexec_renderspec_t;
+
+
 // Android-specific per-window data
 //
 typedef struct _GLFWwindowAndroid
@@ -111,7 +118,8 @@ typedef struct _GLFWlibraryAndroid
     double          xcursor;
     double          ycursor;
     _GLFWwindow*    focusedWindow;
-    ANativeWindow_setBuffersTransform_t fSetBuffersTransform;
+    void* pojavexec_handle;
+    const pojavexec_renderspec_t* renderspec;
 } _GLFWlibraryAndroid;
 
 typedef struct _GLFWcursorAndroid

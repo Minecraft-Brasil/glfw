@@ -125,19 +125,38 @@ extern GLFWbool android_init_window(void);
 extern void android_destroy_window(void);
 
 void* _glfwLoadVulkanDriverAndroid(void) {
-    void* pojavexec_handle = _glfwPlatformLoadModule("libpojavexec.so");
-    if(pojavexec_handle == NULL) return NULL;
-    typedef void* (*loadVulkanDriver_t)();
+
+    if(_glfw.android.pojavexec_handle == NULL) return NULL;
+    typedef void* (*loadVulkanDriver_t)(void);
     loadVulkanDriver_t loadVulkanDriver = (loadVulkanDriver_t)
-            _glfwPlatformGetModuleSymbol(pojavexec_handle, "pojavexec_loadVulkanDriver");
+            _glfwPlatformGetModuleSymbol(_glfw.android.pojavexec_handle, "pojavexec_loadVulkanDriver");
     void* vkHandle = loadVulkanDriver();
-    _glfwPlatformFreeModule(pojavexec_handle);
     return vkHandle;
+}
+
+void* _glfwLoadEglAndroid(void) {
+    void* egl_handle = _glfw.android.renderspec->egl_handle;
+    return egl_handle;
 }
 
 int _glfwInitAndroid(void)
 {
     _glfwPollMonitorsAndroid();
+
+    void* pojavexec_handle = _glfwPlatformLoadModule("libpojavexec.so");
+    if(!pojavexec_handle) {
+        _glfwInputError(GLFW_PLATFORM_ERROR, "Failed to load platform support library");
+        return GLFW_FALSE;
+    }
+
+    _glfw.android.pojavexec_handle = pojavexec_handle;
+
+    typedef const pojavexec_renderspec_t* (*getRenderspec_t)(void);
+    getRenderspec_t getRenderspec = (getRenderspec_t)
+            _glfwPlatformGetModuleSymbol(_glfw.android.pojavexec_handle, "pojavexec_getRenderSpec");
+
+    _glfw.android.renderspec = getRenderspec();
+
     return android_init_window();
 }
 
@@ -145,6 +164,7 @@ void _glfwTerminateAndroid(void)
 {
     android_destroy_window();
     free(_glfw.null.clipboardString);
+    _glfwPlatformFreeModule(_glfw.android.pojavexec_handle);
     _glfwTerminateOSMesa();
     _glfwTerminateEGL();
 }
