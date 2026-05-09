@@ -106,7 +106,7 @@ static GLFWbool chooseEGLConfig(const _GLFWctxconfig* ctxconfig,
             apiBit = EGL_OPENGL_ES2_BIT;
     }
     else
-        apiBit = EGL_OPENGL_ES2_BIT;
+        apiBit = EGL_OPENGL_BIT;
 
     if (_glfw.egl.platform == EGL_PLATFORM_SURFACELESS_MESA)
         surfaceTypeBit = EGL_PBUFFER_BIT;
@@ -415,7 +415,7 @@ GLFWbool _glfwInitEGL(void)
 #elif defined(__OpenBSD__) || defined(__NetBSD__)
         "libEGL.so",
 #elif defined(__ANDROID__)
-        "libltw.so",
+        "libEGL.so",
 #else
         "libEGL.so.1",
 #endif
@@ -636,15 +636,84 @@ GLFWbool _glfwCreateContextEGL(_GLFWwindow* window,
     if (!chooseEGLConfig(ctxconfig, fbconfig, &config))
         return GLFW_FALSE;
 
-    if (!eglBindAPI(EGL_OPENGL_ES_API))
+    if (ctxconfig->client == GLFW_OPENGL_ES_API)
     {
-        _glfwInputError(GLFW_API_UNAVAILABLE,
-                        "EGL: Failed to bind OpenGL ES: %s",
-                        getEGLErrorString(eglGetError()));
-        return GLFW_FALSE;
+        if (!eglBindAPI(EGL_OPENGL_ES_API))
+        {
+            _glfwInputError(GLFW_API_UNAVAILABLE,
+                            "EGL: Failed to bind OpenGL ES: %s",
+                            getEGLErrorString(eglGetError()));
+            return GLFW_FALSE;
+        }
+    }
+    else
+    {
+        if (!eglBindAPI(EGL_OPENGL_API))
+        {
+            _glfwInputError(GLFW_API_UNAVAILABLE,
+                            "EGL: Failed to bind OpenGL: %s",
+                            getEGLErrorString(eglGetError()));
+            return GLFW_FALSE;
+        }
     }
 
-    SET_ATTRIB(EGL_CONTEXT_CLIENT_VERSION, ctxconfig->major);
+    if (_glfw.egl.KHR_create_context)
+    {
+        int mask = 0, flags = 0;
+
+        if (ctxconfig->client == GLFW_OPENGL_API)
+        {
+            if (ctxconfig->forward)
+                flags |= EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE_BIT_KHR;
+
+            if (ctxconfig->profile == GLFW_OPENGL_CORE_PROFILE)
+                mask |= EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR;
+            else if (ctxconfig->profile == GLFW_OPENGL_COMPAT_PROFILE)
+                mask |= EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT_KHR;
+        }
+
+        if (ctxconfig->debug)
+            flags |= EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR;
+
+        if (ctxconfig->robustness)
+        {
+            if (ctxconfig->robustness == GLFW_NO_RESET_NOTIFICATION)
+            {
+                SET_ATTRIB(EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_KHR,
+                           EGL_NO_RESET_NOTIFICATION_KHR);
+            }
+            else if (ctxconfig->robustness == GLFW_LOSE_CONTEXT_ON_RESET)
+            {
+                SET_ATTRIB(EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_KHR,
+                           EGL_LOSE_CONTEXT_ON_RESET_KHR);
+            }
+
+            flags |= EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR;
+        }
+
+        if (ctxconfig->major != 1 || ctxconfig->minor != 0)
+        {
+            SET_ATTRIB(EGL_CONTEXT_MAJOR_VERSION_KHR, ctxconfig->major);
+            SET_ATTRIB(EGL_CONTEXT_MINOR_VERSION_KHR, ctxconfig->minor);
+        }
+
+        if (ctxconfig->noerror)
+        {
+            if (_glfw.egl.KHR_create_context_no_error)
+            SET_ATTRIB(EGL_CONTEXT_OPENGL_NO_ERROR_KHR, true);
+        }
+
+        if (mask)
+        SET_ATTRIB(EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR, mask);
+
+        if (flags)
+        SET_ATTRIB(EGL_CONTEXT_FLAGS_KHR, flags);
+    }
+    else
+    {
+        if (ctxconfig->client == GLFW_OPENGL_ES_API)
+        SET_ATTRIB(EGL_CONTEXT_CLIENT_VERSION, ctxconfig->major);
+    }
 
     if (_glfw.egl.KHR_context_flush_control)
     {
