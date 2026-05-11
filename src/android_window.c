@@ -1044,7 +1044,7 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
                 height = ANativeWindow_getHeight(nativeWindow);
             }
             LOGI("Configure native window for context creation: %p %"PRIi32" %"PRIi32, nativeWindow, width, height);
-            updateNativeWindowDimensions(window, width, height);
+            //updateNativeWindowDimensions(window, width, height);
             newSurface = eglCreateWindowSurface(display, config, nativeWindow, NULL);
         } break;
         default:

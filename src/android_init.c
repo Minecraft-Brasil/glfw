@@ -135,8 +135,7 @@ void* _glfwLoadVulkanDriverAndroid(void) {
 }
 
 void* _glfwLoadEglAndroid(void) {
-    void* egl_handle = _glfw.android.renderspec->egl_handle;
-    return egl_handle;
+    return _glfw.android.renderspec->egl_acquire(_glfw.android.renderspec->egl_path);
 }
 
 int _glfwInitAndroid(void)

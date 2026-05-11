@@ -77,8 +77,11 @@ typedef void (APIENTRY *PFN_vkGetPhysicalDeviceQueueFamilyProperties)(VkPhysical
 
 typedef int32_t (*ANativeWindow_setBuffersTransform_t)(struct ANativeWindow *_Nonnull window,int32_t transform);
 
+typedef void* (*acquire_egl_handle_t)(const char*);
+
 typedef struct {
-    void* egl_handle; // Set to a dlopen handle in order to force GLFW to load EGL symbols from a particular library
+    acquire_egl_handle_t egl_acquire;
+    const char* egl_path;
     int force_gles_context;
     int override_major_version;
 } pojavexec_renderspec_t;
