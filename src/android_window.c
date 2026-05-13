@@ -61,11 +61,10 @@
 
 static _GLFWwindow *surfaceOwner = NULL;
 static _Atomic GLFWbool surfaceDestroyed = true;
-static _Atomic GLFWbool induceResize = false;
+static _Atomic GLFWbool surfaceUpdated = false;
 static _Atomic GLFWbool ownedByVulkan = false;
 static _Atomic GLFWbool surfaceInUse = false;
 static struct ANativeWindow* nativeWindow = NULL;
-static int32_t req_width = 0, req_height = 0;
 static _Atomic uint32_t update_flags = 0;
 
 const char* clipboard_string = NULL;
@@ -984,12 +983,14 @@ int _glfwGetIMEStatusAndroid(_GLFWwindow* window)
     return GLFW_FALSE;
 }
 
-void updateNativeWindowDimensions(_GLFWwindow* window, int width, int height) {
-    EGLint visualId = window->android.visualId;
-    ANativeWindow_setBuffersGeometry(nativeWindow, width, height, visualId);
+void updateNativeWindowDimensions(_GLFWwindow* window) {
+    int width = ANativeWindow_getWidth(nativeWindow);
+    int height = ANativeWindow_getHeight(nativeWindow);
+    LOGI("Update window dimensions: %i %i", width, height);
+    ANativeWindow_setBuffersGeometry(nativeWindow, 0, 0, window->android.visualId);
     window->android.width = width;
     window->android.height = height;
-    induceResize = false;
+    surfaceUpdated = false;
 
     _glfwInputWindowSize(window, width, height);
     _glfwInputFramebufferSize(window, width, height);
@@ -1016,8 +1017,8 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
             pthread_mutex_unlock(&nw_egl_mutex);
         }
     } else {
-        if(currentMode == GLFW_ANDROID_WINDOW_MODE_SURFACE && induceResize) {
-            updateNativeWindowDimensions(window, req_width, req_height);
+        if(currentMode == GLFW_ANDROID_WINDOW_MODE_SURFACE && surfaceUpdated) {
+            updateNativeWindowDimensions(window);
         }
         return window->context.egl.surface;
     }
@@ -1037,14 +1038,8 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
             newSurface = eglCreatePbufferSurface(display, config, attribs);
         } break;
         case GLFW_ANDROID_WINDOW_MODE_SURFACE: {
-            EGLint visualId = window->android.visualId;
-            int32_t width = req_width, height = req_height;
-            if(width == 0 || height == 0) {
-                width = ANativeWindow_getWidth(nativeWindow);
-                height = ANativeWindow_getHeight(nativeWindow);
-            }
-            LOGI("Configure native window for context creation: %p %"PRIi32" %"PRIi32, nativeWindow, width, height);
-            //updateNativeWindowDimensions(window, width, height);
+            LOGI("Configure native window: %p", nativeWindow);
+            updateNativeWindowDimensions(window);
             newSurface = eglCreateWindowSurface(display, config, nativeWindow, NULL);
         } break;
         default:
@@ -1061,7 +1056,7 @@ GLFWbool _glfwSwapBuffersAttentionEglAndroid(_GLFWwindow* window) {
     if(window == surfaceOwner && !ownedByVulkan) {
         switch (window->android.mode) {
             case GLFW_ANDROID_WINDOW_MODE_UNDEFINED: return true;
-            case GLFW_ANDROID_WINDOW_MODE_SURFACE: return surfaceDestroyed || induceResize;
+            case GLFW_ANDROID_WINDOW_MODE_SURFACE: return surfaceDestroyed || surfaceUpdated;
             case GLFW_ANDROID_WINDOW_MODE_PBUFFER: return !surfaceDestroyed;
         }
     } else {
@@ -1289,11 +1284,8 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceCreated(JNIEnv *env, jclass
 }
 
 JNIEXPORT void JNICALL
-Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSetWindowSize(JNIEnv *env, jclass clazz, jint width,
-                                                            jint height) {
-    req_width = width;
-    req_height = height;
-    induceResize = true;
+Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceUpdated(JNIEnv *env, jclass clazz) {
+    surfaceUpdated = true;
 }
 
 JNIEXPORT void JNICALL

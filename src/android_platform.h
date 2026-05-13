@@ -84,6 +84,7 @@ typedef struct {
     const char* egl_path;
     int force_gles_context;
     int override_major_version;
+    bool force_recreate_on_resize;
 } pojavexec_renderspec_t;
 
 
