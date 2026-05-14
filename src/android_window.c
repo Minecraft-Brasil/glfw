@@ -984,10 +984,13 @@ int _glfwGetIMEStatusAndroid(_GLFWwindow* window)
 }
 
 void updateNativeWindowDimensions(_GLFWwindow* window) {
+    // This is incredibly cringe, but...
+    // When we set W/H in the buffer geometry to 0,0, we reset the ANW to its default dimensions
+    // Therefore, we also don't change its dimensions (which breaks vulkan swapchains)
+    ANativeWindow_setBuffersGeometry(nativeWindow, 0, 0, window->android.visualId);
     int width = ANativeWindow_getWidth(nativeWindow);
     int height = ANativeWindow_getHeight(nativeWindow);
     LOGI("Update window dimensions: %i %i", width, height);
-    ANativeWindow_setBuffersGeometry(nativeWindow, 0, 0, window->android.visualId);
     window->android.width = width;
     window->android.height = height;
     surfaceUpdated = false;
@@ -1015,6 +1018,7 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
             pthread_mutex_lock(&nw_egl_mutex);
             pthread_cond_broadcast(&nw_egl_cond);
             pthread_mutex_unlock(&nw_egl_mutex);
+            surfaceInUse = false;
         }
     } else {
         if(currentMode == GLFW_ANDROID_WINDOW_MODE_SURFACE && surfaceUpdated) {
@@ -1040,6 +1044,7 @@ EGLSurface _glfwManageEglSurfaceAndroid(_GLFWwindow* window) {
         case GLFW_ANDROID_WINDOW_MODE_SURFACE: {
             LOGI("Configure native window: %p", nativeWindow);
             updateNativeWindowDimensions(window);
+            surfaceInUse = true;
             newSurface = eglCreateWindowSurface(display, config, nativeWindow, NULL);
         } break;
         default:
@@ -1292,7 +1297,7 @@ JNIEXPORT void JNICALL
 Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceDestroyed(JNIEnv *env,
                                                                            jclass clazz) {
     surfaceDestroyed = true;
-    if(!ownedByVulkan) {
+    if(!ownedByVulkan && surfaceInUse) {
         pthread_mutex_lock(&nw_egl_mutex);
         pthread_cond_wait(&nw_egl_cond, &nw_egl_mutex);
         LOGI("Unhalted after window destruction");
@@ -1393,5 +1398,4 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_sendScrollEvent(JNIEnv *env, jclass claz
             .s.yscroll = yoffset
     };
     android_send_event(&event);
-    // TODO: implement sendScrollEvent()
 }
