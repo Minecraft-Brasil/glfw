@@ -25,24 +25,58 @@
 //========================================================================
 
 #include "internal.h"
-
+#include <stdlib.h>
 
 //////////////////////////////////////////////////////////////////////////
 //////                       GLFW platform API                      //////
 //////////////////////////////////////////////////////////////////////////
 
+static const char* android_joystick_guid = "616e64726f6964000000000000000000";
+static _GLFWjoystick *android_joystick = NULL;
+static GLFWbool initialized = false;
+static _Atomic GLFWbool joystick_connected = false;
+
+extern void _glfwEnableGamepadAndroid(unsigned char* buttons, int buttonCount, float* axes, int axisCount);
+extern void _glfwSendJoystickConnectEvent(void);
+
 GLFWbool _glfwInitJoysticksAndroid(void)
 {
+    const int buttonCount = 14;
+    const int axisCount = 6;
+    if(!android_joystick) android_joystick = _glfwAllocJoystick("DNB-GLFW Joystick", android_joystick_guid, axisCount, buttonCount, 0);
+    if(!android_joystick) return GLFW_FALSE;
+    _glfwEnableGamepadAndroid(android_joystick->buttons, buttonCount, android_joystick->axes, axisCount);
+    if(joystick_connected) _glfwInputJoystick(android_joystick, GLFW_CONNECTED);
+    initialized = true;
     return GLFW_TRUE;
+}
+
+void _glfwUpdateJoystickConnectSate(void) {
+    if(!initialized) return;
+    bool connected = joystick_connected;
+
+    if(initialized && android_joystick->connected != connected) {
+        _glfwInputJoystick(android_joystick, connected ? GLFW_CONNECTED : GLFW_DISCONNECTED);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeNotifyGamepadConnected(JNIEnv *env, jclass clazz) {
+    bool wasConnected = joystick_connected;
+    joystick_connected = true;
+    if(!wasConnected) _glfwSendJoystickConnectEvent();
 }
 
 void _glfwTerminateJoysticksAndroid(void)
 {
+    initialized = false;
+    _glfwInputJoystick(android_joystick, GLFW_DISCONNECTED);
 }
 
 GLFWbool _glfwPollJoystickAndroid(_GLFWjoystick* js, int mode)
 {
-    return GLFW_FALSE;
+    if(js != android_joystick) return GLFW_FALSE;
+    return initialized ? GLFW_TRUE : GLFW_FALSE;
 }
 
 const char* _glfwGetMappingNameAndroid(void)

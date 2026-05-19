@@ -55,6 +55,7 @@
 #define GLFW_ANDROID_EVENT_TYPE_KEYBOARD_KEY 3
 #define GLFW_ANDROID_EVENT_TYPE_UNICODE_CHARS 4
 #define GLFW_ANDROID_EVENT_TYPE_MOUSE_SCROLL 5
+#define GLFW_ANDROID_EVENT_TYPE_JOYSTICK_STATE 6
 
 #define FLAG_MOUSE_POS (1 >> 0)
 #define FLAG_APP_FOCUS (1 >> 1)
@@ -88,6 +89,7 @@ static struct {
     jmethodID method_useCursor;
     jmethodID method_getClipboardString;
     jmethodID method_setClipboardString;
+    jmethodID method_enableDirectGamepad;
 } jni;
 
 static _Thread_local struct {
@@ -232,6 +234,8 @@ static int translate_android_action_button(int32_t actionButton) {
     }
 }
 
+extern void _glfwUpdateJoystickConnectSate(void);
+
 static void android_dequeue_event(input_event_t* evp) {
     input_event_t event = *evp;
     if(surfaceOwner == NULL) return;
@@ -253,6 +257,9 @@ static void android_dequeue_event(input_event_t* evp) {
             break;
         case GLFW_ANDROID_EVENT_TYPE_MOUSE_SCROLL:
             _glfwInputScroll(surfaceOwner, event.s.xscroll, event.s.yscroll);
+            break;
+        case GLFW_ANDROID_EVENT_TYPE_JOYSTICK_STATE:
+            _glfwUpdateJoystickConnectSate();
             break;
     }
 }
@@ -950,6 +957,13 @@ const char* _glfwGetClipboardStringAndroid(void)
     return clipboard_string;
 }
 
+void _glfwEnableGamepadAndroid(unsigned char* buttons, int buttonCount, float* axes, int axisCount) {
+    ensure_comm_connected();
+    jobject buttonBuffer = (*jni_tl.env)->NewDirectByteBuffer(jni_tl.env, buttons, sizeof(char) * buttonCount);
+    jobject axisBuffer = (*jni_tl.env)->NewDirectByteBuffer(jni_tl.env, axes, sizeof(float) * axisCount);
+    (*jni_tl.env)->CallStaticVoidMethod(jni_tl.env, jni.glfw_class, jni.method_enableDirectGamepad, buttonBuffer, axisBuffer);
+}
+
 EGLenum _glfwGetEGLPlatformAndroid(EGLint** attribs)
 {
     return 0;
@@ -1331,6 +1345,7 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_initialize(JNIEnv *env, jclass clazz) {
     jni.method_useCursor = (*env)->GetStaticMethodID(env, clazz, "useCursor","(Lgit/artdeell/dnbootstrap/glfw/GLFWCursor;)V");
     jni.method_getClipboardString = (*env)->GetStaticMethodID(env, clazz, "getClipboardString", "()Ljava/lang/String;");
     jni.method_setClipboardString = (*env)->GetStaticMethodID(env, clazz, "setClipboardString", "(Ljava/lang/String;)V");
+    jni.method_enableDirectGamepad = (*env)->GetStaticMethodID(env, clazz, "enableDirectGamepad", "(Ljava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)V");
 }
 
 JNIEXPORT void JNICALL
@@ -1396,6 +1411,13 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_sendScrollEvent(JNIEnv *env, jclass claz
             .type = GLFW_ANDROID_EVENT_TYPE_MOUSE_SCROLL,
             .s.xscroll = xoffset,
             .s.yscroll = yoffset
+    };
+    android_send_event(&event);
+}
+
+void _glfwSendJoystickConnectEvent(void) {
+    input_event_t event = {
+            .type = GLFW_ANDROID_EVENT_TYPE_JOYSTICK_STATE
     };
     android_send_event(&event);
 }

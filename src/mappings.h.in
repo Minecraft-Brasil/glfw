@@ -78,5 +78,9 @@ const char* _glfwDefaultMappings[] =
 #if defined(GLFW_BUILD_LINUX_JOYSTICK)
 @GLFW_LINUX_MAPPINGS@
 #endif // GLFW_BUILD_LINUX_JOYSTICK
+
+#if defined(_GLFW_ANDROID)
+"616e64726f6964000000000000000000,DNB-GLFW X360 Gamepad,a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5,back:b6,start:b7,leftstick:b8,rightstick:b9,dpup:b10,dpright:b11,dpdown:b12,dpleft:b13,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,"
+#endif
 };
 
