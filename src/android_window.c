@@ -1329,6 +1329,7 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeSurfaceDestroyed(JNIEnv *env,
 JNIEXPORT void JNICALL
 Java_git_artdeell_dnbootstrap_glfw_GLFW_sendMousePosition0__DD(JNIEnv *env, jclass clazz,
                                                           jdouble v1, jdouble v2) {
+    if(cursor_unscaled.x == v1 && cursor_unscaled.y == v2) return;
     cursor_unscaled.x = v1;
     cursor_unscaled.y = v2;
     update_flags |= FLAG_MOUSE_POS;
