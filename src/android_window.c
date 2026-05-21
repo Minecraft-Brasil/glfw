@@ -561,8 +561,11 @@ void _glfwSetWindowSizeAndroid(_GLFWwindow* window, int width, int height)
 
     if (window->android.width != width || window->android.height != height)
     {
-        window->android.width = width;
-        window->android.height = height;
+        // Actually, we don't let the window resize itself, so we just put the old size back in
+        // The only potentially scary thing here is that this may cause a resize tug-of-war,
+        // but hopefully that won't happen...
+        width = window->android.width;
+        height = window->android.height;
         _glfwInputFramebufferSize(window, width, height);
         _glfwInputWindowDamage(window);
         _glfwInputWindowSize(window, width, height);
