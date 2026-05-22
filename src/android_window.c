@@ -268,12 +268,16 @@ static inline void android_send_event(input_event_t *ev) {
     _input_queue_push(&input_queue, ev);
 }
 
+static void computeCursorPos() {
+    int width = surfaceOwner->android.width;
+    int height = surfaceOwner->android.height;
+    _glfw.android.xcursor = cursor_unscaled.x * width;
+    _glfw.android.ycursor = cursor_unscaled.y *  height;
+}
+
 static void push_flag_events() {
     if((update_flags & FLAG_MOUSE_POS) != 0) {
-        int width = surfaceOwner->android.width;
-        int height = surfaceOwner->android.height;
-        _glfw.android.xcursor = cursor_unscaled.x * width;
-        _glfw.android.ycursor = cursor_unscaled.y *  height;
+        computeCursorPos();
         _glfwInputCursorPos(surfaceOwner, _glfw.android.xcursor, _glfw.android.ycursor);
     }
     update_flags = 0;
@@ -859,7 +863,12 @@ void _glfwSetCursorPosAndroid(_GLFWwindow* window, double x, double y)
 
     cursor_unscaled.x = scaled_cursor_x;
     cursor_unscaled.y = scaled_cursor_y;
-    update_flags |= FLAG_MOUSE_POS;
+    if(window == surfaceOwner) {
+        _glfw.android.xcursor = x;
+        _glfw.android.ycursor = y;
+    } else {
+        computeCursorPos();
+    }
 }
 
 void _glfwSetCursorModeAndroid(_GLFWwindow* window, int mode)
