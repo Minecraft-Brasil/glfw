@@ -70,7 +70,7 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_nativeNotifyGamepadConnected(JNIEnv *env
 void _glfwTerminateJoysticksAndroid(void)
 {
     initialized = false;
-    _glfwInputJoystick(android_joystick, GLFW_DISCONNECTED);
+    if(android_joystick != NULL && android_joystick->connected) _glfwInputJoystick(android_joystick, GLFW_DISCONNECTED);
 }
 
 GLFWbool _glfwPollJoystickAndroid(_GLFWjoystick* js, int mode)
