@@ -1379,9 +1379,11 @@ Java_git_artdeell_dnbootstrap_glfw_GLFW_sendKeyEvent(JNIEnv *env, jclass clazz, 
 JNIEXPORT void JNICALL
 Java_git_artdeell_dnbootstrap_glfw_GLFW_sendRawKeyEvent(JNIEnv *env, jclass clazz,
                                                         jint android_code, jint state, jint mods, jchar codepoint) {
+    int glfw_key = translate_android_key(android_code);
+    if(glfw_key == -1) return;
     input_event_t event = {
             .type = GLFW_ANDROID_EVENT_TYPE_KEYBOARD_KEY,
-            .k.glfw_code = translate_android_key(android_code),
+            .k.glfw_code = glfw_key,
             .k.code = android_code,
             .k.state = state,
             .k.mods = mods,
