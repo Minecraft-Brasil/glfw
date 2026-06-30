@@ -8,7 +8,13 @@ android {
 
     defaultConfig {
         minSdk 21
-
+        externalNativeBuild {
+            cmake {
+                arguments "-DGLFW_BUILD_WAYLAND=OFF", "-DGLFW_BUILD_X11=OFF", "-DGLFW_BUILD_ANDROID=ON",
+                        "-DGLFW_BUILD_EXAMPLES=OFF", "-DGLFW_BUILD_TESTS=OFF", "-DGLFW_INSTALL=OFF", "-DBUILD_SHARED_LIBS=ON"
+                cFlags "-Wno-nullability-completeness"
+            }
+        }
     }
 
     buildTypes {
@@ -34,7 +40,7 @@ android {
 
     externalNativeBuild {
         cmake {
-            path file('src/main/cpp/CMakeLists.txt')
+            path file('../CMakeLists.txt')
         }
     }
 }
