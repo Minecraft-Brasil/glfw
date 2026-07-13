@@ -42,6 +42,7 @@
 #include <android/native_window.h>
 #include <math.h>
 #include <android/native_window_jni.h>
+#include <mojoexec.h>
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "android_window", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "android_window", __VA_ARGS__)
@@ -399,9 +400,9 @@ static void android_reconfigure_context(const _GLFWctxconfig *ctxconfig, _GLFWct
     memcpy(target, ctxconfig, sizeof (_GLFWctxconfig));
     if(target->client == GLFW_NO_API) return;
 
-    if(_glfw.android.renderspec->force_gles_context) {
+    if(mojoexec_renderspec.force_gles_context) {
         target->client = GLFW_OPENGL_ES_API;
-        target->major = _glfw.android.renderspec->override_major_version;
+        target->major = mojoexec_renderspec.override_major_version;
         target->minor = 0;
     }
 }
