@@ -447,6 +447,20 @@ GLFWbool _glfwCreateWindowAndroid(_GLFWwindow* window,
 
         if (!_glfwRefreshContextAttribs(window, ctxconfig))
             return GLFW_FALSE;
+
+        // MOJO-GFX-FIX(android-initial-context-binding): legacy LWJGL does not
+        // rebind the window after context introspection. MobileGlues keeps the
+        // first EGL context current so Forge EarlyLoaderGUI can render safely.
+        if (_glfw.android.renderspec->bind_initial_context)
+        {
+            LOGI("Binding initial EGL context for %s",
+                 _glfw.android.renderspec->egl_path == NULL
+                         ? "unknown renderer" : _glfw.android.renderspec->egl_path);
+            window->context.makeCurrent(window);
+            if (_glfwPlatformGetTls(&_glfw.contextSlot) != window)
+                return GLFW_FALSE;
+            LOGI("Initial EGL context bound");
+        }
     }
 
     if (wndconfig->mousePassthrough)
